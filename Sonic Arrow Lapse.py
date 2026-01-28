@@ -9,7 +9,7 @@ pygame.init()
 # ---------------- CONFIG ----------------
 WIDTH, HEIGHT = 800, 600
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Evo Run! Endless Arrow Lapse")
+pygame.display.set_caption("Sonic Arrow Lapse!")
 CLOCK = pygame.time.Clock()
 FPS = 60
 
@@ -32,44 +32,58 @@ GO_TIME = 600
 POP_DURATION = 300
 
 # ---------------- LOAD & ANIMATE SONIC GIF ----------------
-GIF_PATH = os.path.join("gifs", "Sonic.gif")
-gif = Image.open(GIF_PATH)
+def load_gif(path, max_w=None, max_h=None):
+    gif = Image.open(path)
+    frames = []
+    durations = []
 
-SONIC_FRAMES = []
-SONIC_DURATIONS = []
+    for frame in ImageSequence.Iterator(gif):
+        frame = frame.convert("RGBA")
 
-MAX_WIDTH = WIDTH * 0.6
-MAX_HEIGHT = HEIGHT * 0.4
+        if max_w and max_h:
+            w, h = frame.size
+            scale = min(max_w / w, max_h / h, 1)
+            frame = frame.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
-for frame in ImageSequence.Iterator(gif):
-    frame = frame.convert("RGBA")
+        surface = pygame.image.fromstring(
+            frame.tobytes(), frame.size, frame.mode
+        ).convert_alpha()
 
-    w, h = frame.size
-    scale = min(MAX_WIDTH / w, MAX_HEIGHT / h, 1)
-    new_size = (int(w * scale), int(h * scale))
-    frame = frame.resize(new_size, Image.LANCZOS)
+        frames.append(surface)
+        durations.append(frame.info.get("duration", 100))
 
-    surface = pygame.image.fromstring(
-        frame.tobytes(), frame.size, frame.mode
-    ).convert_alpha()
+    return frames, durations
 
-    SONIC_FRAMES.append(surface)
-    SONIC_DURATIONS.append(frame.info.get("duration", 100))
+SONIC_FRAMES, SONIC_DURATIONS = load_gif(
+    os.path.join("gifs", "Sonic.gif"),
+    WIDTH * 0.6,
+    HEIGHT * 0.4
+)
 
-sonic_frame_index = 0
-sonic_last_update = pygame.time.get_ticks()
+GAME_OVER_FRAMES, GAME_OVER_DURATIONS = load_gif(
+    os.path.join("gifs", "Game over.gif"),
+    WIDTH * 0.6,
+    HEIGHT * 0.4
+)
 
-def draw_sonic_gif():
-    global sonic_frame_index, sonic_last_update
+VICTORY_GIFS = [
+    load_gif(os.path.join("gifs", "Victory.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    load_gif(os.path.join("gifs", "Victory 2.gif"), WIDTH * 0.6, HEIGHT * 0.4)
+]
 
+gif_index = 0
+gif_last_update = pygame.time.get_ticks()
+
+def draw_animated_gif(frames, durations, center):
+    global gif_index, gif_last_update
     now = pygame.time.get_ticks()
-    if now - sonic_last_update >= SONIC_DURATIONS[sonic_frame_index]:
-        sonic_frame_index = (sonic_frame_index + 1) % len(SONIC_FRAMES)
-        sonic_last_update = now
 
-    frame = SONIC_FRAMES[sonic_frame_index]
-    rect = frame.get_rect(center=(WIDTH // 2, HEIGHT // 4))
-    SCREEN.blit(frame, rect)
+    if now - gif_last_update >= durations[gif_index]:
+        gif_index = (gif_index + 1) % len(frames)
+        gif_last_update = now
+
+    rect = frames[gif_index].get_rect(center=center)
+    SCREEN.blit(frames[gif_index], rect)
 
 # ---------------- BUTTON ----------------
 class Button:
@@ -123,12 +137,12 @@ def reset_game():
         "speed": 2.5,
         "start_time": 0,
         "game_over": False,
-        "early_fail": False,
         "rank": None,
         "time_text": "",
         "countdown": True,
         "countdown_phase": "ready",
-        "countdown_timer": pygame.time.get_ticks()
+        "countdown_timer": pygame.time.get_ticks(),
+        "victory_gif": None
     }
 
 game_started = False
@@ -142,20 +156,24 @@ def trigger_game_over():
     game["game_over"] = True
     elapsed = (pygame.time.get_ticks() - game["start_time"]) / 1000
 
-    if elapsed >= 180:
-        game["rank"] = "S"
-    elif elapsed >= 120:
-        game["rank"] = "A"
-    elif elapsed >= 60:
-        game["rank"] = "B"
-    elif elapsed >= 30:
+    if elapsed < 30:
+        game["rank"] = "D"
+    elif elapsed < 60:
         game["rank"] = "C"
+    elif elapsed < 120:
+        game["rank"] = "B"
+    elif elapsed < 180:
+        game["rank"] = "A"
     else:
-        game["early_fail"] = True
+        game["rank"] = "S"
 
     minutes = int(elapsed // 60)
     seconds = int(elapsed % 60)
-    game["time_text"] = f"{minutes}:{seconds:02d}"
+    millis = int((elapsed % 1) * 1000)
+    game["time_text"] = f"{minutes}:{seconds:02d}.{millis:03d}"
+
+    if game["rank"] != "D":
+        game["victory_gif"] = random.choice(VICTORY_GIFS)
 
 # ---------------- MAIN LOOP ----------------
 while True:
@@ -199,12 +217,9 @@ while True:
 
     # -------- START SCREEN --------
     if not game_started:
-        draw_sonic_gif()
-
-        SCREEN.blit(
-            BIG_FONT.render("Sonic Arrow lapse!", True, SONIC_BLUE),
-            (WIDTH // 2 - 195, BAR_Y // 2 - 40)
-        )
+        draw_animated_gif(SONIC_FRAMES, SONIC_DURATIONS, (WIDTH // 2, HEIGHT // 4))
+        SCREEN.blit(BIG_FONT.render("Sonic Arrow Lapse!", True, SONIC_BLUE),
+                    (WIDTH // 2 - 210, BAR_Y // 2 + 180))
         start_button.draw(SONIC_BLUE)
 
     # -------- GAME RUNNING --------
@@ -212,8 +227,8 @@ while True:
         if game["countdown"]:
             now = pygame.time.get_ticks()
             elapsed = now - game["countdown_timer"]
-            text = "Ready?" if game["countdown_phase"] == "ready" else "Go!"
-            total = READY_TIME if text == "Ready?" else GO_TIME
+            text = "Ready?" if game["countdown_phase"] == "ready" else "Gotta go fast!"
+            total = READY_TIME if game["countdown_phase"] == "ready" else GO_TIME
 
             scale = min(elapsed / POP_DURATION, 1) * 0.5 + 0.5
             txt = pygame.transform.rotozoom(
@@ -229,6 +244,16 @@ while True:
                     game["countdown"] = False
                     game["start_time"] = pygame.time.get_ticks()
         else:
+            elapsed = (pygame.time.get_ticks() - game["start_time"]) / 1000
+            minutes = int(elapsed // 60)
+            seconds = int(elapsed % 60)
+            millis = int((elapsed % 1) * 1000)
+
+            timer_txt = FONT.render(
+                f"{minutes}:{seconds:02d}.{millis:03d}", True, SONIC_BLUE
+            )
+            SCREEN.blit(timer_txt, (WIDTH - timer_txt.get_width() - 10, 10))
+
             game["spawn_timer"] += 1
             if game["spawn_timer"] >= 35:
                 arrow = random.choice(["left", "right", "up", "down"])
@@ -245,11 +270,15 @@ while True:
 
     # -------- GAME OVER --------
     else:
-        pygame.draw.rect(SCREEN, RED, (0, BAR_Y, WIDTH, BAR_Y))
-        SCREEN.blit(
-            BIG_FONT.render("GAME OVER", True, BLACK),
-            (WIDTH // 2 - 140, BAR_Y + BAR_Y // 2 - 40)
-        )
+        draw_animated_gif(GAME_OVER_FRAMES, GAME_OVER_DURATIONS, (WIDTH // 2, HEIGHT // 4))
+
+        if game["victory_gif"]:
+            frames, durations = game["victory_gif"]
+            draw_animated_gif(frames, durations, (WIDTH // 2, HEIGHT // 4))
+
+        rank_txt = BIG_FONT.render(f"You got rank {game['rank']}", True, GREEN)
+        SCREEN.blit(rank_txt, rank_txt.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 80)))
+
         play_again_button.draw(SONIC_BLUE)
 
     pygame.display.flip()
