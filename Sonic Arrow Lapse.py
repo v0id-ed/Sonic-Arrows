@@ -14,12 +14,16 @@ CLOCK = pygame.time.Clock()
 FPS = 60
 
 # ---------------- COLORS ----------------
-BLACK = (0, 0, 0)
+TAN = (255, 218, 185)
 WHITE = (255, 255, 255)
 RED = (200, 0, 0)
 YELLOW = (255, 251, 0)
 GREEN = (0, 220, 0)
 SONIC_BLUE = (0, 112, 221)
+
+BRONZE = (205, 127, 50)
+SILVER = (192, 192, 192)
+GOLD = (255, 215, 0)
 
 BAR_Y = HEIGHT // 2
 BOX_SIZE = 40
@@ -31,7 +35,7 @@ READY_TIME = 800
 GO_TIME = 600
 POP_DURATION = 300
 
-# ---------------- LOAD & ANIMATE SONIC GIF ----------------
+# ---------------- LOAD GIF ----------------
 def load_gif(path, max_w=None, max_h=None):
     gif = Image.open(path)
     frames = []
@@ -54,36 +58,67 @@ def load_gif(path, max_w=None, max_h=None):
 
     return frames, durations
 
+# ---------------- GIFS ----------------
 SONIC_FRAMES, SONIC_DURATIONS = load_gif(
-    os.path.join("gifs", "Sonic.gif"),
-    WIDTH * 0.6,
-    HEIGHT * 0.4
+    os.path.join("gifs", "Intro.gif"), WIDTH * 0.6, HEIGHT * 0.4
 )
 
-GAME_OVER_FRAMES, GAME_OVER_DURATIONS = load_gif(
-    os.path.join("gifs", "Game over.gif"),
-    WIDTH * 0.6,
-    HEIGHT * 0.4
-)
+SONIC_STATE = {"index": 0, "last_update": pygame.time.get_ticks()}
 
-VICTORY_GIFS = [
-    load_gif(os.path.join("gifs", "Victory.gif"), WIDTH * 0.6, HEIGHT * 0.4),
-    load_gif(os.path.join("gifs", "Victory 2.gif"), WIDTH * 0.6, HEIGHT * 0.4)
+DANCING_GIFS = [
+    load_gif(os.path.join("gifs", "Dancing.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    load_gif(os.path.join("gifs", "Dancing 2.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    load_gif(os.path.join("gifs", "Dancing 3.gif"), WIDTH * 0.6, HEIGHT * 0.4),
 ]
 
-gif_index = 0
-gif_last_update = pygame.time.get_ticks()
+RANK_GIFS = {
+    "D": load_gif(os.path.join("gifs", "Rank D.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    "C": load_gif(os.path.join("gifs", "Rank C.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    "B": load_gif(os.path.join("gifs", "Rank B.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    "A": load_gif(os.path.join("gifs", "Rank A.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+    "S": load_gif(os.path.join("gifs", "Rank S.gif"), WIDTH * 0.6, HEIGHT * 0.4),
+}
 
-def draw_animated_gif(frames, durations, center):
-    global gif_index, gif_last_update
+RANK_COLORS = {
+    "D": RED,
+    "C": WHITE,
+    "B": BRONZE,
+    "A": SILVER,
+    "S": GOLD
+}
+
+# ---------------- GIF DRAWING ----------------
+def draw_animated_gif(frames, durations, center, gif_state=None):
+    """
+    frames, durations: GIF frames
+    center: where to draw
+    gif_state: optional dict to store 'index' and 'last_update'
+    """
+    if gif_state is None:
+        gif_state = {"index": 0, "last_update": pygame.time.get_ticks()}
+
     now = pygame.time.get_ticks()
 
-    if now - gif_last_update >= durations[gif_index]:
-        gif_index = (gif_index + 1) % len(frames)
-        gif_last_update = now
+    if now - gif_state["last_update"] >= durations[gif_state["index"]]:
+        gif_state["index"] = (gif_state["index"] + 1) % len(frames)
+        gif_state["last_update"] = now
 
-    rect = frames[gif_index].get_rect(center=center)
-    SCREEN.blit(frames[gif_index], rect)
+    rect = frames[gif_state["index"]].get_rect(center=center)
+    SCREEN.blit(frames[gif_state["index"]], rect)
+
+    return gif_state
+
+# ---------------- OUTLINED TEXT ----------------
+def draw_outlined_text(text, font, fill, outline, pos):
+    base = font.render(text, True, fill)
+    outline_surf = font.render(text, True, outline)
+    rect = base.get_rect(topleft=pos)
+
+    for dx in (-2, -1, 1, 2):
+        for dy in (-2, -1, 1, 2):
+            SCREEN.blit(outline_surf, rect.move(dx, dy))
+
+    SCREEN.blit(base, rect)
 
 # ---------------- BUTTON ----------------
 class Button:
@@ -142,14 +177,17 @@ def reset_game():
         "countdown": True,
         "countdown_phase": "ready",
         "countdown_timer": pygame.time.get_ticks(),
-        "victory_gif": None
+        "rank_gif": None,
+        "dancing_gif": random.choice(DANCING_GIFS),
+        "dancing_state": {"index": 0, "last_update": pygame.time.get_ticks()},
+        "rank_state": {"index": 0, "last_update": pygame.time.get_ticks()}
     }
 
 game_started = False
 game = reset_game()
 
-start_button = Button((WIDTH // 2 - 75, BAR_Y + 100, 150, 50), "Start")
-play_again_button = Button((WIDTH // 2 - 100, HEIGHT - 70, 200, 50), "Play Again")
+start_button = Button((WIDTH // 2 - 75, BAR_Y + 200, 150, 50), "Start")
+play_again_button = Button((WIDTH // 2 - 100, HEIGHT - 100, 200, 50), "Play Again")
 
 # ---------------- GAME OVER ----------------
 def trigger_game_over():
@@ -158,22 +196,16 @@ def trigger_game_over():
 
     if elapsed < 30:
         game["rank"] = "D"
-    elif elapsed < 60:
+    elif elapsed < 45:
         game["rank"] = "C"
-    elif elapsed < 120:
+    elif elapsed < 60:
         game["rank"] = "B"
-    elif elapsed < 180:
+    elif elapsed < 90:
         game["rank"] = "A"
     else:
         game["rank"] = "S"
 
-    minutes = int(elapsed // 60)
-    seconds = int(elapsed % 60)
-    millis = int((elapsed % 1) * 1000)
-    game["time_text"] = f"{minutes}:{seconds:02d}.{millis:03d}"
-
-    if game["rank"] != "D":
-        game["victory_gif"] = random.choice(VICTORY_GIFS)
+    game["rank_gif"] = RANK_GIFS[game["rank"]]
 
 # ---------------- MAIN LOOP ----------------
 while True:
@@ -212,21 +244,35 @@ while True:
                 else:
                     trigger_game_over()
 
-    SCREEN.fill(BLACK)
+    SCREEN.fill(TAN)
     pygame.draw.rect(SCREEN, SONIC_BLUE, (0, BAR_Y - 4, WIDTH, 8))
 
     # -------- START SCREEN --------
     if not game_started:
-        draw_animated_gif(SONIC_FRAMES, SONIC_DURATIONS, (WIDTH // 2, HEIGHT // 4))
-        SCREEN.blit(BIG_FONT.render("Sonic Arrow Lapse!", True, SONIC_BLUE),
-                    (WIDTH // 2 - 210, BAR_Y // 2 + 180))
+        SONIC_STATE = draw_animated_gif(SONIC_FRAMES, SONIC_DURATIONS, (WIDTH // 2, HEIGHT // 4), gif_state=SONIC_STATE)
+        draw_outlined_text(
+            "Sonic Arrow Lapse!",
+            BIG_FONT,
+            GOLD,
+            SONIC_BLUE,
+            (WIDTH // 2 - 210, BAR_Y // 2 + 240)
+        )
         start_button.draw(SONIC_BLUE)
 
     # -------- GAME RUNNING --------
     elif not game["game_over"]:
+        # Dancing GIF plays continuously during gameplay
+        game["dancing_state"] = draw_animated_gif(
+            game["dancing_gif"][0],
+            game["dancing_gif"][1],
+            (WIDTH // 2, HEIGHT // 4),
+            gif_state=game["dancing_state"]
+        )
+
         if game["countdown"]:
             now = pygame.time.get_ticks()
             elapsed = now - game["countdown_timer"]
+
             text = "Ready?" if game["countdown_phase"] == "ready" else "Gotta go fast!"
             total = READY_TIME if game["countdown_phase"] == "ready" else GO_TIME
 
@@ -243,6 +289,7 @@ while True:
                 else:
                     game["countdown"] = False
                     game["start_time"] = pygame.time.get_ticks()
+
         else:
             elapsed = (pygame.time.get_ticks() - game["start_time"]) / 1000
             minutes = int(elapsed // 60)
@@ -250,7 +297,7 @@ while True:
             millis = int((elapsed % 1) * 1000)
 
             timer_txt = FONT.render(
-                f"{minutes}:{seconds:02d}.{millis:03d}", True, SONIC_BLUE
+                f"{minutes}:{seconds:02d}.{millis:03d}", True, WHITE
             )
             SCREEN.blit(timer_txt, (WIDTH - timer_txt.get_width() - 10, 10))
 
@@ -270,14 +317,15 @@ while True:
 
     # -------- GAME OVER --------
     else:
-        draw_animated_gif(GAME_OVER_FRAMES, GAME_OVER_DURATIONS, (WIDTH // 2, HEIGHT // 4))
+        game["rank_state"] = draw_animated_gif(
+            *game["rank_gif"],
+            (WIDTH // 2, HEIGHT // 4),
+            gif_state=game["rank_state"]
+        )
 
-        if game["victory_gif"]:
-            frames, durations = game["victory_gif"]
-            draw_animated_gif(frames, durations, (WIDTH // 2, HEIGHT // 4))
-
-        rank_txt = BIG_FONT.render(f"You got rank {game['rank']}", True, GREEN)
-        SCREEN.blit(rank_txt, rank_txt.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 80)))
+        rank_color = RANK_COLORS[game["rank"]]
+        rank_txt = BIG_FONT.render(f"You got rank {game['rank']}", True, rank_color)
+        SCREEN.blit(rank_txt, rank_txt.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 120)))
 
         play_again_button.draw(SONIC_BLUE)
 
