@@ -43,16 +43,15 @@ BOX_SIZE = 40
 FONT = pygame.font.SysFont(None, 36)
 BIG_FONT = pygame.font.SysFont(None, 64)
 
-READY_TIME = 800   # milliseconds
-GO_TIME = 600      # milliseconds
-POP_DURATION = 300 # milliseconds for pop-up scale
+READY_TIME = 800
+GO_TIME = 600
+POP_DURATION = 300
 
 # ---------------- LOAD GIF ----------------
 def load_gif(path, max_w=None, max_h=None):
     try:
         gif = Image.open(path)
     except Exception:
-        # Fallback empty surface if GIF missing
         surf = pygame.Surface((100, 100), pygame.SRCALPHA)
         return [surf], [100]
 
@@ -208,7 +207,7 @@ while True:
             GOLD,
             SONIC_BLUE,
             (WIDTH//2 - 210, BAR_Y//2 + 240),
-            thickness=5  # thicker outline
+            thickness=5
         )
         start_button.draw(SONIC_BLUE)
 
