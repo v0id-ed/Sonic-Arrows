@@ -38,6 +38,10 @@ except pygame.error:
 INTRO_IMAGE = pygame.image.load("Sonic.jpg").convert_alpha()
 intro_rect = INTRO_IMAGE.get_rect(center=(WIDTH // 2, HEIGHT // 4))
 
+# Rotation for Sonic intro
+intro_angle = 0  # Rotation angle
+ROTATION_SPEED = 0.2  # Degrees per frame, clockwise
+
 BAR_Y = HEIGHT // 2
 BOX_SIZE = 40
 FONT = pygame.font.SysFont(None, 36)
@@ -246,7 +250,12 @@ while True:
 
     # -------- START SCREEN --------
     if not game_started:
-        SCREEN.blit(INTRO_IMAGE, intro_rect)
+        # Rotate Sonic smoothly
+        intro_angle = (intro_angle + ROTATION_SPEED) % 360
+        rotated_image = pygame.transform.rotozoom(INTRO_IMAGE, -intro_angle, 1)  # Negative = clockwise
+        rotated_rect = rotated_image.get_rect(center=intro_rect.center)
+        SCREEN.blit(rotated_image, rotated_rect)
+
         draw_outlined_text(
             "Sonic Arrows!", BIG_FONT, GOLD, SONIC_BLUE,
             (WIDTH//2 - 150, BAR_Y//2 + 240), thickness=5
